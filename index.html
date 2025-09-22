@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Financial Dashboard</title>
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for data visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .container {
+            max-width: 1024px;
+            margin: auto;
+        }
+        /* Hide scrollbars for a cleaner look */
+        .overflow-y-auto::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <!-- Main Dashboard Container -->
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden">
+        <header class="bg-blue-600 text-white p-6 rounded-t-2xl">
+            <h1 class="text-3xl font-bold text-center">Financial Dashboard</h1>
+        </header>
+
+        <!-- Search and Display Area -->
+        <div class="p-6">
+            <!-- Search Form -->
+            <form id="search-form" class="flex flex-col sm:flex-row gap-4 mb-6">
+                <input type="text" id="ticker-input" placeholder="Enter a stock ticker (e.g., AAPL)"
+                       class="flex-grow p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
+                <button type="submit" id="search-button"
+                        class="bg-blue-600 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:bg-blue-700 transition duration-200">
+                    Search
+                </button>
+            </form>
+
+            <div class="md:col-span-2 bg-gray-50 rounded-xl shadow-inner p-4 min-h-[500px] flex flex-col items-center justify-center">
+                <div id="chart-container" class="w-full h-full flex items-center justify-center">
+                    <canvas id="stockChart" class="hidden"></canvas>
+                    <div id="status-message" class="text-center text-gray-400">
+                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-24 h-24 mb-4 mx-auto">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125l2.25 2.25m0 0l2.25 2.25M5.25 15.375L7.5 17.625m2.25 2.25L12 21.75m0 0l2.25 2.25M12 21.75V15.75m0 6L9.75 19.5m0 0l-2.25-2.25m2.25 2.25l-2.25-2.25M12 21.75V15.75m6-6l-2.25 2.25m0 0L14.25 14.625m-2.25-2.25L9.75 10.5m0-4.5h.008v.008h-.008V6zm3 0h.008v.008H15V6zm3 0h.008v.008H18V6z" />
+                        </svg>
+                        <p>Enter a stock ticker and press search to view its chart.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const searchForm = document.getElementById('search-form');
+            const tickerInput = document.getElementById('ticker-input');
+            const statusMessage = document.getElementById('status-message');
+            const stockChartCanvas = document.getElementById('stockChart');
+            const searchButton = document.getElementById('search-button');
+
+            let stockChart = null;
+
+            const renderChart = (data) => {
+                const dates = data.map(d => d.x);
+                const prices = data.map(d => d.y);
+
+                if (stockChart) {
+                    stockChart.destroy();
+                }
+
+                stockChartCanvas.classList.remove('hidden');
+                stockChart = new Chart(stockChartCanvas, {
+                    type: 'line',
+                    data: {
+                        labels: dates,
+                        datasets: [{
+                            label: 'Closing Price (USD)',
+                            data: prices,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                            tension: 0.2,
+                            pointRadius: 0,
+                            borderWidth: 2,
+                            fill: true,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                labels: {
+                                    font: {
+                                        family: 'Inter',
+                                    },
+                                    boxWidth: 0,
+                                    usePointStyle: true,
+                                    pointStyle: 'circle'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: `Historical Data for ${tickerInput.value.toUpperCase()}`,
+                                font: {
+                                    size: 18,
+                                    family: 'Inter',
+                                    weight: 'bold'
+                                },
+                                padding: {
+                                    top: 10,
+                                    bottom: 20
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                ticks: {
+                                    maxTicksLimit: 10,
+                                    font: { family: 'Inter' },
+                                },
+                                grid: { display: false }
+                            },
+                            y: {
+                                ticks: {
+                                    font: { family: 'Inter' },
+                                },
+                                grid: { color: '#e5e7eb' }
+                            }
+                        }
+                    }
+                });
+            };
+
+            const setLoading = (isLoading) => {
+                if (isLoading) {
+                    searchButton.disabled = true;
+                    searchButton.textContent = 'Searching...';
+                    statusMessage.innerHTML = '<svg class="animate-spin h-8 w-8 text-blue-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><p class="mt-2">Loading data...</p>';
+                    stockChartCanvas.classList.add('hidden');
+                } else {
+                    searchButton.disabled = false;
+                    searchButton.textContent = 'Search';
+                }
+            };
+
+            searchForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const ticker = tickerInput.value.trim().toUpperCase();
+
+                if (!ticker) {
+                    statusMessage.innerHTML = '<p class="text-red-500">Please enter a stock ticker.</p>';
+                    stockChartCanvas.classList.add('hidden');
+                    return;
+                }
+                
+                setLoading(true);
+                statusMessage.innerHTML = ''; // Clear status message
+                
+                try {
+                    const response = await fetch(`/api/timeseries?symbol=${ticker}`);
+                    const data = await response.json();
+                    
+                    if (!response.ok) {
+                        statusMessage.innerHTML = `<p class="text-red-500">Error: ${data.error || 'Failed to fetch data'}</p>`;
+                        stockChartCanvas.classList.add('hidden');
+                    } else {
+                        renderChart(data);
+                    }
+                } catch (error) {
+                    statusMessage.innerHTML = `<p class="text-red-500">Network error: Could not connect to the server.</p>`;
+                    stockChartCanvas.classList.add('hidden');
+                } finally {
+                    setLoading(false);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
