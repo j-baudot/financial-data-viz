@@ -85,8 +85,8 @@
                 const data = await response.json();
 
                 if (data.length > 0) {
-                    const dates = data.map(d => d.x);
-                    const prices = data.map(d => d.y);
+                    const dates = data.map(d => d.timestamp);
+                    const prices = data.map(d => d.price);
 
                     if (chart) {
                         chart.destroy();

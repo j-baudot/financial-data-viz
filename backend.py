@@ -1,83 +1,80 @@
-from flask import Flask, jsonify, request, send_from_directory, abort
-from datetime import datetime, timedelta
+import os
+import time
+import json
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
-from faker import Faker
-import random
+from kafka import KafkaConsumer
+from threading import Thread
+import logging
+from collections import deque
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
-# Enable CORS for all routes and origins
 CORS(app)
 
-fake = Faker()
+# In-memory storage for the latest data from each symbol
+# A deque will automatically discard the oldest item when it reaches its maximum length
+stock_history = {}
 
-# Generate symbols fake data
-num_symbols = 50
-symbols = []
-for _ in range(num_symbols):
-    # Generate a fake company name and ticker symbol
-    company_name = fake.company()
-    symbol = "".join(word[0].upper() for word in company_name.split())
-    
-    # Ensure the symbol is not too short or long
-    if 2 <= len(symbol) <= 5:
-        symbols.append({
-            "symbol": symbol,
-            "description": company_name
-        })
+def start_kafka_consumer():
+    """Starts a Kafka consumer in a separate thread."""
+    try:
+        consumer = KafkaConsumer(
+            'stock-data',
+            bootstrap_servers='kafka:9092',
+            auto_offset_reset='latest',
+            enable_auto_commit=True,
+            group_id='my-group',
+            value_deserializer=lambda x: json.loads(x.decode('utf-8'))
+        )
+        for message in consumer:
+            data = message.value
+            symbol = data.get('symbol')
+            # Check if the symbol exists in our history, and if not, create a new deque
+            if symbol not in stock_history:
+                stock_history[symbol] = deque(maxlen=120)
+            
+            # Store the new data point, oldest data will be automatically removed
+            stock_history[symbol].append(data)
+            
+            #logging.info(f"Received and stored data for: {symbol}")
+    except Exception as e:
+        logging.error(f"Error in Kafka consumer: {e}")
 
-# Add a few well-known fake symbols for consistency
-symbols.append({"symbol": "AAPL", "description": "Apple Inc."})
-symbols.append({"symbol": "GOOG", "description": "Alphabet Inc."})
-symbols.append({"symbol": "MSFT", "description": "Microsoft Corp."})
-symbols.append({"symbol": "AMZN", "description": "Amazon.com, Inc."})
-symbols.append({"symbol": "TSLA", "description": "Tesla, Inc."})
-
-# Generate fake time series
-# Start from a random, but consistent, base price
-prices = []
-for symbol in [s["symbol"] for s in symbols]:
-    base_price = sum(ord(c) for c in symbol) * 1.5 + 50
-    current_price = base_price + random.uniform(-10, 10)
-
-    price_timeserie = []
-    for i in range(90, 0, -1):
-        # Simulate a random walk for the price
-        change = random.uniform(-1.5, 1.5)
-        current_price += change
-        current_price = max(current_price, 0.01) # Price can't be negative
-
-        price_timeserie.append(current_price)
-
-    prices.append(price_timeserie)
-
+# Start the consumer in a background thread
+consumer_thread = Thread(target=start_kafka_consumer)
+consumer_thread.daemon = True
+consumer_thread.start()
 
 @app.route('/')
 def serve_index():
-    """Serves the main HTML file for the frontend."""
+    """Serves the main HTML file."""
     return send_from_directory('.', 'index.html')
 
 @app.route('/api/timeseries')
 def get_time_series():
+    """Returns the latest data for a given symbol."""
     symbol = request.args.get('symbol').upper()
-    
-    symbol_index = next((i for i, s in enumerate(symbols) if s["symbol"] == symbol), None)
-    if symbol_index is None: abort(400,f"Unknown symbol {symbol}")
-    price_timeserie = prices[symbol_index]
-
-    formatted_data = []
-
-    for i in range(len(price_timeserie), 0, -1):
-        date = datetime.now() - timedelta(days=i)
-        formatted_data.append({
-            "x": date.strftime('%Y-%m-%d'),
-            "y": round(price_timeserie[i-1], 2)
-        })
-
-    return jsonify(formatted_data)
+    data = stock_history.get(symbol)
+    if data:
+        # Convert the deque to a list before returning
+        return jsonify(list(data))
+    return jsonify({"error": "Data not found for symbol"}), 404
 
 @app.route('/api/symbols')
 def get_symbols():
+    """Returns the list of available symbols from the latest data."""
+    # Infer available symbols from the keys in our latest_data cache
+    symbols = []
+    for symbol, data in stock_history.items():
+        symbols.append({
+            "symbol": symbol,
+            "description": data[0].get("description", "N/A")
+        })
+    logging.info(f"API to send {len(symbols)} symbols")
     return jsonify(symbols)
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+    app.run(debug=True, host='0.0.0.0', port=5000)
