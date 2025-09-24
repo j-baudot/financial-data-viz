@@ -40,7 +40,7 @@ def generate_stock_data():
             
             data_point = {
                 "symbol": s['symbol'],
-                "timestamp": timestamp.isoformat(),
+                "timestamp": timestamp.isoformat(timespec='seconds'),
                 "price": round(current_price, 2),
                 "description": s['description']
             }

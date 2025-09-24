@@ -42,7 +42,7 @@
                 <p class="mt-2 text-gray-500">Loading data...</p>
             </div>
 
-            <div id="chart-container" class="bg-gray-50 p-6 rounded-lg shadow-inner">
+            <div id="chart-container" style="height: 400px" class="bg-gray-50 p-6 rounded-lg shadow-inner">
                 <canvas id="timeSeriesChart"></canvas>
             </div>
 
@@ -58,7 +58,7 @@
         const errorMessageDiv = document.getElementById('error-message');
 
         const ctx = document.getElementById('timeSeriesChart').getContext('2d');
-        const init_dates = ['20250923']
+        const init_dates = ['20250923T08:00:00']
         const init_prices = [0]
         const chart = new Chart(ctx, {
             type: 'line',
@@ -119,7 +119,7 @@
             if (symbol == null) {symbol = symbolSelect.value;}
             //showLoading(true);
             showErrorMessage('');
-            chartContainer.style.display = 'none';
+            //chartContainer.style.display = 'none';
 
             try {
                 const response = await fetch(`${API_BASE_URL}/api/timeseries?symbol=${symbol}`);
@@ -138,11 +138,15 @@
                     // }
 
                     chart.data.labels = dates
-                    chart.data.datasets[0].label = `${symbol} Close Price`
+                    //chart.data.datasets[0].label = `${symbol} Close Price`
                     chart.data.datasets[0].data = prices
-                    chart.update();
+                    chart.options.scales = {
+                        x: { display: true }, // as needed
+                        y: { display: true }  // as needed
+                    };
+                    chart.update('none');
 
-                    //chartContainer.style.display = 'block';
+                    chartContainer.style.display = 'block';
                 } else {
                     const now = new Date();
                     showErrorMessage(`No time series data available for ${symbol} - ${now}.`);
