@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Financial Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         body {
@@ -211,11 +212,17 @@
             fetchAndRenderTimeSeries(event.target.value);
         });
 
-        // Create EventSource for SSE
-        const eventSource = new EventSource(`${API_BASE_URL}/events`);
-        eventSource.onmessage = function(event) {
-           fetchAndRenderTimeSeries(null);
-        };
+        // // Create EventSource for SSE
+        // const eventSource = new EventSource(`${API_BASE_URL}/events`);
+        // eventSource.onmessage = function(event) {
+        //    fetchAndRenderTimeSeries(null);
+        // };
+
+        // Manage new data events from WebSockets
+        const socket = io();
+        socket.on('new_financial_data', (data) => {
+            fetchAndRenderTimeSeries(null);
+        });
 
 
     </script>

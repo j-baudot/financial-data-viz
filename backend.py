@@ -3,6 +3,7 @@ import time
 import json
 from flask import Flask, jsonify, request, send_from_directory, Response
 from flask_cors import CORS
+from flask_socketio import SocketIO
 from kafka import KafkaConsumer
 import redis
 import threading
@@ -13,32 +14,24 @@ from collections import deque
 from symbols import SYMBOLS
 
 # Init shared data
-stock_vals_lock = threading.Lock()
-stock_history = {}
-event_queue = queue.Queue()
-redis_client = redis.Redis(host='redis', port=6379, db=0)
+stock_history = {} # An in-memory dictionary to gather stocks time series over time
+stock_history_lock = threading.Lock() # A lock to ensure stock_history management is thread safe
+redis_client = redis.Redis(host='redis', port=6379, db=0) # A Redis server to manage events in thread safe queues
 
-# Configure logging and build main app
-logging.basicConfig(level=logging.INFO)
-app = Flask(__name__)
-CORS(app)
-
-# SSE for front-end data updates
-@app.route('/events')
-def sse_stream():
-    def event_stream():
-        while True:
-            # Block until new data is available in the queue
-            data = event_queue.get()
-            yield f"data: {data}\n\n"
-    return Response(event_stream(), mimetype="text/event-stream")
-
-# Manage data history in-memory
 def get_stock_history_dequeue(symbol):
-    with stock_vals_lock:
+    with stock_history_lock:
         if symbol not in stock_history: stock_history[symbol] = deque(maxlen=120)
         return stock_history[symbol]
+    
+# Configure the flask main app
+logging.basicConfig(level=logging.INFO)
+app = Flask('financial-data-viz-backend')
+CORS(app)
 
+# Init the class for WebSockets usage
+socketio = SocketIO(app,cors_allowed_origins="*")
+
+# Kafka consumer thread where data stream is stored to Redis and front end is notified 
 def start_kafka_consumer():
     """Starts a Kafka consumer in a separate thread."""
     try:
@@ -51,24 +44,21 @@ def start_kafka_consumer():
             value_deserializer=lambda x: json.loads(x.decode('utf-8'))
         )
         for message in consumer:
-            #logging.info(f"Message received from Kafka Producer")
             data = message.value
             symbol = data.get('symbol')
             redis_client.lpush(f'queue:{symbol}', json.dumps(data))
-
-            # Trigger SSE event
-            event_queue.put(data['timestamp'])
+            socketio.emit('new_financial_data',data['timestamp'])
 
     except Exception as e:
         logging.error(f"Error in Kafka consumer: {e}")
 
-# Front-end
-@app.route('/')
-def serve_index():
-    """Serves the main HTML file."""
-    return send_from_directory('.', 'index.html')
+# Kafka consumer thread startup
+if __name__ == '__main__':
+    consumer_thread = threading.Thread(target=start_kafka_consumer)
+    consumer_thread.daemon = True
+    consumer_thread.start()
 
-# Symbols API
+# Stock symbols API
 @app.route('/api/symbols')
 def get_symbols():
     """Returns the list of available symbols from the latest data."""
@@ -79,22 +69,21 @@ def get_symbols():
 def get_time_series():
     """Returns the latest data for a given symbol."""
     symbol = request.args.get('symbol')
-
     symbol_deque = get_stock_history_dequeue(symbol)
-    logging.info(f'Dequeue of {symbol} as {len(symbol_deque)} elements initially')
 
     while True:
         data = redis_client.rpop(f'queue:{symbol}')
         if data is None: break
         symbol_deque.append(json.loads(data))
 
-    logging.info(f'Dequeue of {symbol} as {len(symbol_deque)} elements finally')
-
-    # Convert the deque to a list before returning
     return jsonify(list(symbol_deque))
 
+# Front-end route
+@app.route('/')
+def serve_index():
+    """Serves the main HTML file."""
+    return send_from_directory('.', 'index.html')
+
+# Main Flask app startup
 if __name__ == '__main__':
-    consumer_thread = threading.Thread(target=start_kafka_consumer)
-    consumer_thread.daemon = True
-    consumer_thread.start()
     app.run(debug=True, host='0.0.0.0', port=5000)
