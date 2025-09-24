@@ -23,6 +23,15 @@ services:
     depends_on:
       - zookeeper
 
+  redis:
+    image: redis:7.4-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    environment:
+      - REDIS_HOST=redis
+    command: redis-server --save 20 1 --loglevel warning
+
   producer:
     build: .
     container_name: producer
