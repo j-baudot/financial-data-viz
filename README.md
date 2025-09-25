@@ -3,7 +3,7 @@
 ![Printscreen](ressources/printscreen.gif)
 
 ## Purpose
-This repository is a toy project aimed at practicing data management pipelines.
+This repository is a toy project aimed at practicing data engineering pipelines.
 
 For now on, it contains a single application which allow users to display live stock values in a web browser.
 
@@ -11,7 +11,7 @@ As access to financial APIs is not that straightforward, stocks names are fakes 
 
 ## How to use it
 1. Clone this repository
-2. Run docker-compose up --build
+2. From the root folder run docker-compose up --build
 3. Open http://127.0.0.1:5000 on your favorite web browser
 4. Enjoy selecting your favorite stock symbol and see it's pricing evolving over time in a limited time window (120 seconds).
 
